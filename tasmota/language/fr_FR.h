@@ -152,6 +152,7 @@
 #define D_POWER_FACTOR "Fact de puiss"
 #define D_POWERUSAGE "Puissance"
 #define D_POWERUSAGE_ACTIVE "Puiss active"
+#define D_POWERUSAGE_ACTIVE_TOTAL "Active Power Total"
 #define D_POWERUSAGE_APPARENT "Puiss apparente"
 #define D_POWERUSAGE_REACTIVE "Puiss réactive"
 #define D_PRESSURE "Pression"
@@ -165,7 +166,6 @@
 #define D_RESTART "Redémarrage"
 #define D_RESTARTING "Redémarre"
 #define D_RESTART_REASON "Raison du redémarrage"
-#define D_RESTORE "restaurer"
 #define D_RETAINED "persistant"		   // MQTT
 #define D_RULE "Règle"
 #define D_SAVE "Enregistrer"
@@ -188,7 +188,9 @@
 #define D_TRANSMIT "Transmettre"
 #define D_TRUE "Vrai"
 #define D_TVOC "TVOC"				         // not used ???
-#define D_UPGRADE "la mise à jour" 	 // "Lancer la mise à jour"
+#define D_TWILIGHT_ASTRONOMICAL "Astronomical"
+#define D_TWILIGHT_CIVIL "Civil"
+#define D_TWILIGHT_NAUTICAL "Nautical"
 #define D_UPLOAD "Upload"            // Not better in french
 #define D_UPTIME "Durée d'activité"
 #define D_USED "utilisé"
@@ -286,6 +288,7 @@
 #define D_RESET_CONFIGURATION "Configuration par défaut"
 #define D_BACKUP_CONFIGURATION "Sauvegarde de la config."
 #define D_RESTORE_CONFIGURATION "Restauration de la config."
+#define D_START_RESTORE "Start restore"
 #define D_MAIN_MENU "Menu principal"
 
 #define D_MODULE_PARAMETERS "Paramètres module"
@@ -303,6 +306,7 @@
 #define D_REFRESH_TO_SCAN_AGAIN "Rafraîchir pour scanner à nouveau"
 #define D_DUPLICATE_ACCESSPOINT "Point d'Accès dupliqué"
 #define D_SKIPPING_LOW_QUALITY "Évité car de mauvaise qualité"
+#define D_MODE "Mode"
 #define D_RSSI "RSSI"
 #define D_WEP "WEP"
 #define D_WPA_PSK "WPA PSK"
@@ -542,6 +546,22 @@
 #define D_DEVICE_INPUT "Entrée"
 #define D_DEVICE_OUTPUT "Sortie"
 
+// xdrv_39_thermostat.ino
+#define D_THERMOSTAT                  "Thermostat"
+#define D_THERMOSTAT_SET_POINT        "Set Point Temperature"
+#define D_THERMOSTAT_SENSOR           "Current Temperature"
+#define D_THERMOSTAT_GRADIENT         "Gradient Temperature"
+#define D_THERMOSTAT_DUTY_CYCLE       "Duty cycle"
+#define D_THERMOSTAT_CYCLE_TIME       "Cycle time"
+#define D_THERMOSTAT_PI_AUTOTUNE      "PI Auto tuning"
+#define D_THERMOSTAT_CONTROL_METHOD   "Control method"
+#define D_THERMOSTAT_RAMP_UP          "Ramp up"
+#define D_THERMOSTAT_PI               "PI"
+#define D_THERMOSTAT_AUTOTUNE         "Autotune"
+#define D_THERMOSTAT_RAMP_UP_HYBRID   "Ramp up (Hybrid)"
+#define D_THERMOSTAT_PI_HYBRID        "PI (Hybrid)"
+#define D_THERMOSTAT_AUTOTUNE_HYBRID  "Autotune (Hybrid)"
+
 // xsns_05_ds18b20.ino
 #define D_SENSOR_BUSY "Capteur occupé"
 #define D_SENSOR_CRC_ERROR "Erreur CRC capteur"
@@ -652,6 +672,8 @@
 #define D_SENSOR_I2S_BCLK_IN   "I2S WS In"
 #define D_SENSOR_I2S_DIN       "I2S DIn"
 #define D_SENSOR_I2S_DOUT      "I2S DOut"
+#define D_SENSOR_I2S_DAC       "I2S DAC"
+#define D_SENSOR_HDMI_CEC      "HDMI CEC"
 #define D_SENSOR_WS2812        "WS2812"
 #define D_SENSOR_DFR562        "MP3 Player"
 #define D_SENSOR_DFR562_BUSY   "MP3 Busy"
@@ -668,6 +690,7 @@
 #define D_SENSOR_IRRECV        "IR Rx"
 #define D_SENSOR_MHZ_RX        "MHZ Rx"
 #define D_SENSOR_MHZ_TX        "MHZ Tx"
+#define D_SENSOR_HC8_RX        "HC8 Rx"
 #define D_SENSOR_PZEM004_RX    "PZEM004 Rx"
 #define D_SENSOR_PZEM016_RX    "PZEM016 Rx"
 #define D_SENSOR_PZEM017_RX    "PZEM017 Rx"
@@ -934,6 +957,7 @@
 #define D_SENSOR_BIOPDU_PZEM016_RX "BioPDU PZEM016 Rx"
 #define D_SENSOR_BIOPDU_BIT    "BioPDU Bit"
 #define D_SENSOR_LOX_O2_RX     "LoxO2 RX"
+#define D_GPIO_MAGIC_SWITCH "MagicSwitch"
 
 
 // Units

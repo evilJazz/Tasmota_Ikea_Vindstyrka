@@ -701,6 +701,7 @@ void WcInterrupt(uint32_t state) {
   // Stop camera ISR if active to fix TG1WDT_SYS_RESET
   if (!Wc.up) { return; }
 
+  WcSetStreamserver(state);
   if (state) {
     // Re-enable interrupts
     cam_start();
@@ -3036,6 +3037,9 @@ bool Xdrv99(uint32_t function) {
       AddLog(LOG_LEVEL_DEBUG, PSTR("CAM: FUNC_SAVE_BEFORE_RESTART after delay"));
 #endif      
     } break;
+    case FUNC_ACTIVE:
+      result = true;
+      break;
 
   }
   return result;

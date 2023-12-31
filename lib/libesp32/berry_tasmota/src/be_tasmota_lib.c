@@ -5,6 +5,7 @@
  *******************************************************************/
 #include "be_constobj.h"
 #include "be_ctypes.h"
+#include "be_mapping.h"
 
 extern struct TasmotaGlobal_t TasmotaGlobal;
 extern struct TSettings * Settings;
@@ -33,6 +34,8 @@ extern int l_yield(bvm *vm);
 extern int l_delay(bvm *vm);
 extern int l_delay_microseconds(bvm *vm);
 extern int l_scaleuint(bvm *vm);
+extern int l_scaleint(bvm *vm);
+extern int l_sineint(bvm *vm);
 extern int l_logInfo(bvm *vm);
 extern int l_loglevel(bvm *vm);
 extern int l_save(bvm *vm);
@@ -61,6 +64,10 @@ extern int l_getswitch(bvm *vm);
 extern int l_i2cenabled(bvm *vm);
 extern int tasm_find_op(bvm *vm);
 extern int tasm_apply_str_op(bvm *vm);
+
+// tasmota.version() -> int
+extern int32_t be_Tasmota_version(void);
+BE_FUNC_CTYPE_DECLARE(be_Tasmota_version, "i", "-");
 
 #include "solidify/solidified_tasmota_class.h"
 #include "solidify/solidified_rule_matcher.h"
@@ -113,6 +120,8 @@ class be_class_tasmota (scope: global, name: Tasmota) {
     delay, func(l_delay)
     delay_microseconds, func(l_delay_microseconds)
     scale_uint, static_func(l_scaleuint)
+    scale_int, static_func(l_scaleint)
+    sine_int, static_func(l_sineint)
     log, func(l_logInfo)
     loglevel, func(l_loglevel)
     save, func(l_save)
@@ -137,6 +146,7 @@ class be_class_tasmota (scope: global, name: Tasmota) {
     get_switches, func(l_getswitch)
 
     i2c_enabled, func(l_i2cenabled)
+    version, ctype_func(be_Tasmota_version)
 
     fast_loop, closure(Tasmota_fast_loop_closure)
     add_fast_loop, closure(Tasmota_add_fast_loop_closure)
@@ -145,6 +155,7 @@ class be_class_tasmota (scope: global, name: Tasmota) {
     _find_op, func(tasm_find_op)        // new C version for finding a rule operator
     _apply_str_op, func(tasm_apply_str_op)
     find_key_i, closure(Tasmota_find_key_i_closure)
+    find_list_i, closure(Tasmota_find_list_i_closure)
     find_op, closure(Tasmota_find_op_closure)
     add_rule, closure(Tasmota_add_rule_closure)
     remove_rule, closure(Tasmota_remove_rule_closure)

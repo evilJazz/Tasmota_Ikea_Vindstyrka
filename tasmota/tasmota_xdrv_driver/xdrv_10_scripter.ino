@@ -70,9 +70,13 @@ const uint8_t SCRIPT_VERS[2] = {5, 2};
 #endif // USE_SML_M
 
 #ifndef MAXFILT
-#define MAXFILT 5
+#define MAXFILT 10
 #endif
+
+#ifndef SCRIPT_SVARSIZE
 #define SCRIPT_SVARSIZE 20
+#endif
+
 #ifndef SCRIPT_MAXSSIZE
 #define SCRIPT_MAXSSIZE 48
 #endif
@@ -156,6 +160,7 @@ char *Get_esc_char(char *cp, char *esc_chr);
 #define MAX_EXT_ARRAYS 5
 #endif
 
+
 #ifndef STASK_PRIO
 #define STASK_PRIO 1
 #endif
@@ -189,7 +194,9 @@ void Script_ticker4_end(void) {
 }
 #endif
 
-
+#ifndef HARDWARE_FALLBACK
+#define HARDWARE_FALLBACK          2
+#endif
 
 // EEPROM MACROS
 // i2c eeprom
@@ -333,10 +340,18 @@ typedef union {
   };
 } SCRIPT_TYPE;
 
+
+#if 1
+struct T_INDEX {
+  uint16_t index;
+  SCRIPT_TYPE bits;
+};
+#else
 struct T_INDEX {
   uint8_t index;
   SCRIPT_TYPE bits;
 };
+#endif
 
 struct M_FILT {
 #ifdef LARGE_ARRAYS
@@ -477,7 +492,7 @@ struct SCRIPT_MEM {
     uint16_t script_size;
     uint8_t *script_pram;
     uint16_t script_pram_size;
-    uint8_t numvars;
+    uint16_t numvars;
     uint8_t arres;
     void *script_mem;
     uint16_t script_mem_size;
@@ -550,6 +565,11 @@ struct SCRIPT_MEM {
     ScriptOneWire ow;
 #endif
 
+#ifdef USE_SCRIPT_TCP_SERVER
+    WiFiServer *tcp_server;
+    WiFiClient tcp_client;
+#endif
+
 } glob_script_mem;
 
 
@@ -610,7 +630,7 @@ int32_t opt_fext(File *fp,  char *ts_from, char *ts_to, uint32_t flg);
 int32_t extract_from_file(File *fp,  char *ts_from, char *ts_to, int8_t coffs, TS_FLOAT **a_ptr, uint16_t *a_len, uint8_t numa, int16_t accum);
 #endif
 char *eval_sub(char *lp, TS_FLOAT *fvar, char *rstr);
-uint32_t script_ow(uint8_t sel, uint32_t val);
+int32_t script_ow(uint8_t sel, uint32_t val);
 int32_t script_logfile_write(char *path, char *payload, uint32_t size);
 void script_sort_array(TS_FLOAT *array, uint16_t size);
 
@@ -620,7 +640,7 @@ void ScriptEverySecond(void) {
     struct T_INDEX *vtp = glob_script_mem.type;
     TS_FLOAT delta = (millis() - glob_script_mem.script_lastmillis) / 1000.0;
     glob_script_mem.script_lastmillis = millis();
-    for (uint8_t count=0; count<glob_script_mem.numvars; count++) {
+    for (uint16_t count = 0; count < glob_script_mem.numvars; count++) {
       if (vtp[count].bits.is_timer) {
         // decrements timers
         TS_FLOAT *fp = &glob_script_mem.fvars[vtp[count].index];
@@ -1137,7 +1157,7 @@ char *script;
     // now preset permanent vars
     TS_FLOAT *fp = (TS_FLOAT*)glob_script_mem.script_pram;
     struct T_INDEX *vtp = glob_script_mem.type;
-    for (uint8_t count = 0; count<glob_script_mem.numvars; count++) {
+    for (uint16_t count = 0; count < glob_script_mem.numvars; count++) {
       if (vtp[count].bits.is_permanent && !vtp[count].bits.is_string) {
         uint8_t index = vtp[count].index;
         if (vtp[count].bits.is_filter) {
@@ -1158,7 +1178,7 @@ char *script;
       }
     }
     sp = (char*)fp;
-    for (uint8_t count = 0; count<glob_script_mem.numvars; count++) {
+    for (uint16_t count = 0; count < glob_script_mem.numvars; count++) {
       if (vtp[count].bits.is_permanent && vtp[count].bits.is_string) {
         uint8_t index = vtp[count].index;
         char *dp = glob_script_mem.glob_snp + (index * glob_script_mem.max_ssize);
@@ -1188,6 +1208,8 @@ char *script;
       free(imemptr);
       if (strings_op) free(strings_op);
     }
+
+    glob_script_mem.script_lastmillis = millis();
     return err;
 }
 
@@ -1820,6 +1842,10 @@ int32_t opt_fext(File *fp,  char *ts_from, char *ts_to, uint32_t flg) {
   return fres;
 }
 
+#ifndef FEXT_MAX_LINE_LENGTH
+#define FEXT_MAX_LINE_LENGTH 256
+#endif
+
 // assume 1. entry is timestamp, others are tab delimited values until LF
 // file reference, from timestamp, to timestampm, column offset, array pointers, array lenght, number of arrays
 int32_t extract_from_file(File *fp,  char *ts_from, char *ts_to, int8_t coffs, TS_FLOAT **a_ptr, uint16_t *a_len, uint8_t numa, int16_t accum) {
@@ -1834,7 +1860,7 @@ int32_t extract_from_file(File *fp,  char *ts_from, char *ts_to, int8_t coffs, T
       // seek to last entry
       if (cpos > 1) cpos -= 2;
       // now seek back to last line
-      uint8_t lbuff[256];
+      uint8_t lbuff[FEXT_MAX_LINE_LENGTH];
       uint8_t iob;
       uint16_t index = sizeof(lbuff) -1;
       fp->seek(cpos - sizeof(lbuff), SeekSet);
@@ -1919,6 +1945,9 @@ int32_t extract_from_file(File *fp,  char *ts_from, char *ts_to, int8_t coffs, T
     uint8_t buff[2], iob;
     fp->read(buff, 1);
     iob = buff[0];
+    TS_FLOAT fval;
+    uint16_t curpos;
+
     if (iob == '\t' || iob == ',' || iob == '\n' || iob == '\r') {
       rstr[sindex] = 0;
       sindex = 0;
@@ -1955,10 +1984,11 @@ int32_t extract_from_file(File *fp,  char *ts_from, char *ts_to, int8_t coffs, T
         } else {
           // data columns
           if (range) {
-            uint8_t curpos = colpos - coffs;
+            curpos = colpos - coffs;
             if (colpos >= coffs && curpos < numa) {
               if (a_len[curpos]) {
-                TS_FLOAT fval = CharToFloat(rstr);
+                fval = CharToFloat(rstr);
+nextcol:
                 uint8_t flg = 1;
                 if ((mflg[curpos] & 1) == 1) {
                   // absolute values, build diffs
@@ -1999,12 +2029,20 @@ int32_t extract_from_file(File *fp,  char *ts_from, char *ts_to, int8_t coffs, T
       }
       colpos++;
       if (iob == '\n' || iob == '\r') {
-        lastpos = fp->position();
-        colpos = 0;
-        lines ++;
-        if (lines == 1) {
-          if (ipos) {
-            fp->seek(ipos, SeekSet);
+        // end of line
+        if (colpos <= numa) {
+          // empty column
+          curpos = colpos - coffs;
+          fval = 0;
+          goto nextcol;
+        } else {
+          lastpos = fp->position();
+          colpos = 0;
+          lines ++;
+          if (lines == 1) {
+            if (ipos) {
+              fp->seek(ipos, SeekSet);
+            }
           }
         }
       }
@@ -2306,7 +2344,7 @@ uint32_t match_vars(char *dvnam, TS_FLOAT **fp, char **sp, uint32_t *ind) {
     uint8_t slen = strlen(cp);
     if (slen == olen && *cp == dvnam[0]) {
       if (!strncmp(cp, dvnam, olen)) {
-        uint8_t index = vtp[count].index;
+        uint16_t index = vtp[count].index;
         if (vtp[count].bits.is_string == 0) {
           if (vtp[count].bits.is_filter) {
             // error
@@ -2843,7 +2881,17 @@ chknext:
           SCRIPT_SKIP_SPACES
           uint16_t alens;
           TS_FLOAT *fps;
+          char *slp = lp;
           lp = get_array_by_name(lp, &fps, &alens, 0);
+          if (lp == 0 || fps == 0) {
+            lp = slp;
+            lp = GetNumericArgument(lp, OPER_EQU, &fvar, 0);
+            for (uint32_t cnt = 0; cnt < alend; cnt++ ) {
+              fpd[cnt] = fvar;
+            }
+            fvar = alend;
+            goto nfuncexit;
+          }
           SCRIPT_SKIP_SPACES
           if (alens < alend) {
             alend = alens;
@@ -2974,7 +3022,7 @@ chknext:
           uint8_t vtype;
           lp = isvar(lp + 4, &vtype, &ind, 0, 0, gv);
           if (!ind.bits.constant) {
-            uint8_t index = glob_script_mem.type[ind.index].index;
+            uint16_t index = glob_script_mem.type[ind.index].index;
             fvar = glob_script_mem.fvars[index] != glob_script_mem.s_fvars[index];
             glob_script_mem.s_fvars[index] = glob_script_mem.fvars[index];
           } else {
@@ -3136,7 +3184,7 @@ extern void W8960_SetGain(uint8_t sel, uint16_t value);
           uint8_t vtype;
           lp = isvar(lp + 5, &vtype, &ind, 0, 0, gv);
           if (!ind.bits.constant) {
-            uint8_t index = glob_script_mem.type[ind.index].index;
+            uint16_t index = glob_script_mem.type[ind.index].index;
             fvar = glob_script_mem.fvars[index] - glob_script_mem.s_fvars[index];
             glob_script_mem.s_fvars[index] = glob_script_mem.fvars[index];
           } else {
@@ -3332,7 +3380,7 @@ extern void W8960_SetGain(uint8_t sel, uint16_t value);
         if (!strncmp_XP(lp, XPSTR("fr("), 3)) {
           struct T_INDEX ind;
           uint8_t vtype;
-          uint8_t sindex = 0;
+          uint16_t sindex = 0;
           lp = isvar(lp + 3, &vtype, &ind, 0, 0, gv);
           if (vtype != VAR_NV) {
             // found variable as result
@@ -4925,7 +4973,7 @@ extern char *SML_GetSVal(uint32_t index);
                 fvar = -1;
               } else {
                 // string result
-                uint8_t sindex = glob_script_mem.type[ind.index].index;
+                uint16_t sindex = glob_script_mem.type[ind.index].index;
                 char *cp = glob_script_mem.glob_snp + (sindex * glob_script_mem.max_ssize);
                 fvar = SML_Set_WStr(fvar1, cp);
               }
@@ -4946,6 +4994,14 @@ extern char *SML_GetSVal(uint32_t index);
           lp = GetNumericArgument(lp + 5, OPER_EQU, &fvar, gv);
           if (fvar < 1) fvar = 1;
           SML_Decode(fvar - 1);
+          goto nfuncexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("smls("), 5)) {
+          TS_FLOAT meter;
+          lp = GetNumericArgument(lp + 5, OPER_EQU, &meter, gv);
+          if (meter < 1) meter = 1;
+          lp = GetNumericArgument(lp, OPER_EQU, &fvar, gv);
+          SML_Shift_Num(meter - 1, fvar);
           goto nfuncexit;
         }
         if (!strncmp_XP(lp, XPSTR("smlv["), 5)) {
@@ -4988,8 +5044,8 @@ extern char *SML_GetSVal(uint32_t index);
             if (Is_gpio_used(rxpin) || Is_gpio_used(txpin)) {
               AddLog(LOG_LEVEL_INFO, PSTR("SCR: warning, pins already used"));
             }
-
-            glob_script_mem.sp = new TasmotaSerial(rxpin, txpin, 1, 0, rxbsiz);
+ 
+            glob_script_mem.sp = new TasmotaSerial(rxpin, txpin, HARDWARE_FALLBACK, 0, rxbsiz);
 
             if (glob_script_mem.sp) {
               fvar = glob_script_mem.sp->begin(br, ConvertSerialConfig(sconfig));
@@ -5003,8 +5059,9 @@ extern char *SML_GetSVal(uint32_t index);
 #endif
               AddLog(LOG_LEVEL_INFO, PSTR("SCR: Serial port set to %s %d bit/s at rx=%d tx=%d rbu=%d uart=%d"), GetSerialConfig().c_str(), (uint32_t)br,  (uint32_t)rxpin, (uint32_t)txpin, (uint32_t)rxbsiz, uart);
               Settings->serial_config = savc;
-              if (rxpin == 3 and txpin == 1) ClaimSerial();
-
+              if (glob_script_mem.sp->hardwareSerial()) {
+                ClaimSerial();
+              }
             } else {
               fvar = -2;
             }
@@ -5796,6 +5853,184 @@ extern char *SML_GetSVal(uint32_t index);
           goto nfuncexit;
         }
 #endif
+#ifdef USE_SCRIPT_TCP_SERVER
+        if (!strncmp_XP(lp, XPSTR("wso("), 4)) {
+          TS_FLOAT port;
+          lp = GetNumericArgument(lp + 4, OPER_EQU, &port, gv);
+          glob_script_mem.tcp_server = new WiFiServer(port);
+          fvar = 0;
+          if (!glob_script_mem.tcp_server) {
+            fvar = -1;
+          } else  {
+            AddLog(LOG_LEVEL_INFO, PSTR("tcp server started"));
+          }
+          glob_script_mem.tcp_server->begin();
+          glob_script_mem.tcp_server->setNoDelay(true);
+
+          goto nfuncexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("wsc("), 4)) {
+          if (glob_script_mem.tcp_server) {
+            glob_script_mem.tcp_client.stop();
+            glob_script_mem.tcp_server->stop();
+            delete glob_script_mem.tcp_server;
+            glob_script_mem.tcp_server = 0;
+          }
+          fvar = 0;
+          goto nfuncexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("wsa("), 4)) {
+          fvar = 0;
+          if (glob_script_mem.tcp_server) {
+            if (glob_script_mem.tcp_server->hasClient()) {
+              glob_script_mem.tcp_client = glob_script_mem.tcp_server->available();
+              AddLog(LOG_LEVEL_DEBUG, PSTR("tcp client connected"));
+            }
+            if (glob_script_mem.tcp_client && glob_script_mem.tcp_client.connected()) {
+              fvar = glob_script_mem.tcp_client.available();
+            } else {
+              AddLog(LOG_LEVEL_DEBUG, PSTR("tcp client not connected"));
+            }
+          } else {
+            AddLog(LOG_LEVEL_DEBUG, PSTR("tcp server not active"));
+          }
+          goto nfuncexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("wsrs("), 5)) {
+          fvar = 0;
+          char buff[SCRIPT_MAXSSIZE];
+          if (glob_script_mem.tcp_server) {
+            if (glob_script_mem.tcp_client.connected()) {
+                uint16_t slen = glob_script_mem.tcp_client.available();
+                if (slen > sizeof(buff)) {
+                  slen = sizeof(buff);
+                }
+                for (uint16_t cnt = 0; cnt < slen; cnt++) {
+                  buff[cnt] = glob_script_mem.tcp_client.read();
+                }
+                buff[slen] = 0; 
+                if (sp) strlcpy(sp, buff, glob_script_mem.max_ssize);
+            }
+          }
+          goto strexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("wsws("), 5)) {
+          fvar = 0;
+          char buff[SCRIPT_MAXSSIZE];
+          lp = GetStringArgument(lp + 5, OPER_EQU, buff, 0);
+          if (glob_script_mem.tcp_server) {
+            if (glob_script_mem.tcp_client.connected()) {
+              glob_script_mem.tcp_client.write(buff, strlen(buff));
+            }
+          }
+          goto nfuncexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("wsra("), 5)) {
+          TS_FLOAT *fpd = 0;
+          uint16_t alend;
+          uint16_t ipos;
+          lp = get_array_by_name(lp + 5, &fpd, &alend, &ipos);
+          SCRIPT_SKIP_SPACES
+          if (glob_script_mem.tcp_server) {
+            if (glob_script_mem.tcp_client.connected()) {
+                uint16_t slen = glob_script_mem.tcp_client.available();
+                if (slen > alend) {
+                  slen = alend;
+                }
+                for (uint16_t cnt = 0; cnt < slen; cnt++) {
+                  *fpd++ = glob_script_mem.tcp_client.read();
+                }
+                fvar = slen;
+            }
+          }
+          goto nfuncexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("wswa("), 5)) {
+          TS_FLOAT *fpd = 0;
+          uint16_t alend;
+          uint16_t ipos;
+          lp = get_array_by_name(lp + 5, &fpd, &alend, &ipos);
+          SCRIPT_SKIP_SPACES
+          lp = GetNumericArgument(lp, OPER_EQU, &fvar, gv);
+          uint16_t al = fvar;
+          if (al > alend) {
+            al = alend;
+          }
+          SCRIPT_SKIP_SPACES
+
+          uint16_t opts = 0;
+          if (*lp != ')') {
+            lp = GetNumericArgument(lp, OPER_EQU, &fvar, gv);
+            opts = fvar;
+          }
+          if (glob_script_mem.tcp_server) {
+            if (glob_script_mem.tcp_client.connected()) {
+              uint8_t *abf = (uint8_t*)malloc(al * 4);
+              uint8_t *oabf = abf;
+              uint16_t dlen = 0;
+              if (abf) {
+                for (uint16_t cnt = 0; cnt < al; cnt++) {
+                  switch (opts) {
+                    case 0:
+                      //glob_script_mem.tcp_client.write((uint8_t)*fpd++);
+                      *abf++ = (uint8_t)*fpd++;
+                      dlen++;
+                      break;
+                    case 1:
+                      { 
+                        uint16_t wval = *fpd++;
+                        //glob_script_mem.tcp_client.write(wval >> 8);
+                        //glob_script_mem.tcp_client.write(wval);
+                        *abf++ = (wval >> 8);
+                        *abf++ = wval;
+                        dlen += 2;
+                      }
+                      break;
+                    case 2:
+                      {
+                        int16_t swval = *fpd++;
+                        //glob_script_mem.tcp_client.write(swval >> 8);
+                        //glob_script_mem.tcp_client.write(swval);
+                        *abf++ = (swval >> 8);
+                        *abf++ = swval;
+                        dlen += 2;
+                      }
+                      break;
+                    case 3:
+                      {
+                        uint32_t lval = *(uint32_t*)fpd;
+                        fpd++;
+                        //glob_script_mem.tcp_client.write(lval >> 24);
+                        //glob_script_mem.tcp_client.write(lval >> 16);
+                        //glob_script_mem.tcp_client.write(lval >> 8);
+                        //glob_script_mem.tcp_client.write(lval);
+                        *abf++ = (lval >> 24);
+                        *abf++ = (lval >> 16);
+                        *abf++ = (lval >> 8);
+                        *abf++ = lval;
+                        dlen += 4;
+                      }
+                      break;
+                  }
+                }
+                glob_script_mem.tcp_client.write(oabf, dlen);
+                free(oabf);
+              }
+            }
+          }
+          goto nfuncexit;
+        }
+        if (!strncmp_XP(lp, XPSTR("wsf("), 4)) {
+          fvar = -1;
+          if (glob_script_mem.tcp_server) {
+            if (glob_script_mem.tcp_client.connected()) {
+              glob_script_mem.tcp_client.flush();
+              fvar = 0;
+            }
+          }
+          goto nfuncexit;
+        }
+#endif
         break;
       case 'y':
         if (!strncmp_XP(vname, XPSTR("year"), 4)) {
@@ -6236,7 +6471,7 @@ extern "C" {
 
 int32_t UpdVar(char *vname, float *fvar, uint32_t mode) {
   uint8_t type;
-  uint8_t index;
+  uint16_t index;
   if (*vname == '@') {
       vname++;
       type = *vname;
@@ -7751,7 +7986,7 @@ bool script_OneWireCrc8(uint8_t *addr) {
   return (crc == *addr);               // addr 8
 }
 
-uint32_t script_ow(uint8_t sel, uint32_t val) {
+int32_t script_ow(uint8_t sel, uint32_t val) {
 uint32_t res = 0;
 uint8_t bits;
 bool invert = false;
@@ -8116,9 +8351,9 @@ void Scripter_save_pvars(void) {
   TS_FLOAT *fp = (TS_FLOAT*)glob_script_mem.script_pram;
   mlen+=sizeof(TS_FLOAT);
   struct T_INDEX *vtp = glob_script_mem.type;
-  for (uint8_t count = 0; count<glob_script_mem.numvars; count++) {
+  for (uint16_t count = 0; count < glob_script_mem.numvars; count++) {
     if (vtp[count].bits.is_permanent && !vtp[count].bits.is_string) {
-      uint8_t index = vtp[count].index;
+      uint16_t index = vtp[count].index;
       if (vtp[count].bits.is_filter) {
         // save array
         uint16_t len = 0;
@@ -8142,7 +8377,7 @@ void Scripter_save_pvars(void) {
     }
   }
   char *cp = (char*)fp;
-  for (uint8_t count = 0; count<glob_script_mem.numvars; count++) {
+  for (uint16_t count = 0; count < glob_script_mem.numvars; count++) {
     if (vtp[count].bits.is_permanent && vtp[count].bits.is_string) {
       uint8_t index = vtp[count].index;
       char *sp = glob_script_mem.glob_snp + (index * glob_script_mem.max_ssize);
@@ -9156,13 +9391,15 @@ bool Script_SubCmd(void) {
   char cmdbuff[128];
   char *cp = cmdbuff;
   *cp++ = '#';
-  strcpy(cp, command);
+  strlcpy(cp, command, sizeof(cmdbuff) - 1);
   uint8_t tlen = strlen(command);
   cp += tlen;
   if (XdrvMailbox.data_len > 0) {
     *cp++ = '(';
-    strncpy(cp, XdrvMailbox.data,XdrvMailbox.data_len);
-    cp += XdrvMailbox.data_len;
+    uint32_t max_space = sizeof(cmdbuff) - tlen - 4;  // 4 = #()0
+    uint32_t max_len = min(XdrvMailbox.data_len, max_space);
+    strncpy(cp, XdrvMailbox.data, max_len);
+    cp += max_len;
     *cp++ = ')';
     *cp = 0;
   }
@@ -10137,7 +10374,7 @@ void ScriptFullWebpage(uint8_t page) {
   }
 
   WSContentBegin(200, CT_HTML);
-  WSContentSend_P(HTTP_HEADER1, PSTR(D_HTML_LANGUAGE), SettingsText(SET_DEVICENAME), PSTR("Full Screen"));
+  WSContentSend_P(HTTP_HEADER1, PSTR(D_HTML_LANGUAGE), SettingsTextEscaped(SET_DEVICENAME).c_str(), PSTR("Full Screen"));
   WSContentSend_P(HTTP_SCRIPT_FULLPAGE1, page , fullpage_refresh);
   WSContentSend_P(HTTP_SCRIPT_FULLPAGE2, fullpage_refresh);
   //WSContentSend_P(PSTR("<div id='l1' name='l1'></div>"));
@@ -10347,7 +10584,7 @@ uint16_t cipos = 0;
     lp = isvar(lp, &vtype, &ind, &sysvar, 0, 0);
     if (vtype != VAR_NV) {
       SCRIPT_SKIP_SPACES
-      uint8_t index = glob_script_mem.type[ind.index].index;
+      uint16_t index = glob_script_mem.type[ind.index].index;
       if ((vtype & STYPE) == 0) {
         // numeric result
         //Serial.printf("numeric %d - %d \n",ind.index,index);
@@ -10441,6 +10678,8 @@ uint32_t cnt;
 #define WSO_FORCEPLAIN 4
 #define WSO_FORCEMAIN 8
 #define WSO_FORCEGUI 16
+#define WSO_FORCETAB 32
+#define WSO_FORCESUBFILE 64
 #define WSO_STOP_DIV 0x80
 
 void WCS_DIV(uint8_t flag) {
@@ -10541,7 +10780,7 @@ void ScriptWebShow(char mc, uint8_t page) {
           //goto nextwebline;
         } else if (!strncmp(lp, "%/", 2)) {
           // send file
-          if (mc) {
+          if (mc || (specopt & WSO_FORCESUBFILE)) {
             web_send_file(mc, lp + 1);
           }
         } else {
@@ -10585,6 +10824,9 @@ int32_t web_send_file(char mc, char *fname) {
         // skip comment lines
         continue;
       }
+      if (*lp == ';') {
+       // continue;
+      }
       web_send_line(mc, lbuff);
     }
     file.close();
@@ -10623,6 +10865,15 @@ const char *gc_str;
   }
 
   bool dogui = ((!mc && (*lin != '$')) || (mc == 'w' && (*lin != '$'))) && (!(specopt & WSO_FORCEMAIN));
+
+  if (!strncmp(lin, "%=#", 3)) {
+    // subroutine
+    uint8_t sflg = specopt;
+    specopt = WSO_FORCEPLAIN;
+    lin = scripter_sub(lin + 1, 0);
+    specopt = sflg;
+    return lin;
+  }
 
   if ((dogui && !(specopt & WSO_FORCEGUI)) || (!dogui && (specopt & WSO_FORCEGUI))) {
   //if ( ((!mc && (*lin != '$')) || (mc == 'w' && (*lin != '$'))) && (!(specopt & WSO_FORCEMAIN)) || (specopt & WSO_FORCEGUI)) {
@@ -11018,13 +11269,17 @@ const char *gc_str;
       lp++;
 
     } else {
-      if (mc == 'w' || (specopt & WSO_FORCEPLAIN)) {
-        WSContentSend_P(PSTR("%s"), lin);
+      if (specopt & WSO_FORCETAB) {
+        WSContentSend_P(PSTR("{s}%s{e}"), lin);
       } else {
-        if (optflg) {
-          WSContentSend_P(PSTR("<div>%s</div>"), lin);
+        if (mc == 'w' || (specopt & WSO_FORCEPLAIN)) {
+          WSContentSend_P(PSTR("%s"), lin);
         } else {
-          WSContentSend_P(PSTR("{s}%s{e}"), lin);
+          if (optflg) {
+            WSContentSend_P(PSTR("<div>%s</div>"), lin);
+          } else {
+            WSContentSend_P(PSTR("{s}%s{e}"), lin);
+          }
         }
       }
     }
@@ -11950,24 +12205,24 @@ int32_t call2pwl(const char *url) {
 #endif // TESLA_POWERWALL
 
 
-#ifdef ESP8266
+//#ifdef ESP8266
 #include "WiFiClientSecureLightBearSSL.h"
-#else
-#include <WiFiClientSecure.h>
-#endif //ESP8266
+//#else
+//#include <WiFiClientSecure.h>
+//#endif //ESP8266
 
 // get https info page json string
 uint32_t call2https(const char *host, const char *path) {
   //if (TasmotaGlobal.global_state.wifi_down) return 1;
   uint32_t status = 0;
 
-#ifdef ESP32
-  WiFiClientSecure *httpsClient;
-  httpsClient = new WiFiClientSecure;
-#else
+//#ifdef ESP32
+//  WiFiClientSecure *httpsClient;
+//  httpsClient = new WiFiClientSecure;
+//#else
   BearSSL::WiFiClientSecure_light *httpsClient;
   httpsClient = new BearSSL::WiFiClientSecure_light(1024, 1024);
-#endif
+//#endif
 
   httpsClient->setTimeout(2000);
   httpsClient->setInsecure();
@@ -12857,6 +13112,10 @@ bool Xdrv10(uint32_t function)
       break;
 
     case FUNC_NETWORK_UP:
+      break;
+    
+    case FUNC_ACTIVE:
+      result = true;
       break;
   }
   return result;

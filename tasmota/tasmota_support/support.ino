@@ -727,7 +727,7 @@ bool NewerVersion(char* version_str) {
   char version_dup[strlen(version_str) +1];
   strncpy(version_dup, version_str, sizeof(version_dup));  // Duplicate the version_str as strtok_r will modify it.
   // Loop through the version string, splitting on '.' seperators.
-  for (char *str = strtok_r(version_dup, ".", &str_ptr); str && i < sizeof(VERSION); str = strtok_r(nullptr, ".", &str_ptr), i++) {
+  for (char *str = strtok_r(version_dup, ".", &str_ptr); str && i < sizeof(TASMOTA_VERSION); str = strtok_r(nullptr, ".", &str_ptr), i++) {
     int field = atoi(str);
     // The fields in a version string can only range from 0-255.
     if ((field < 0) || (field > 255)) {
@@ -744,17 +744,17 @@ bool NewerVersion(char* version_str) {
   }
   // A version string should have 2-4 fields. e.g. 1.2, 1.2.3, or 1.2.3a (= 1.2.3.1).
   // If not, then don't consider it a valid version string.
-  if ((i < 2) || (i > sizeof(VERSION))) {
+  if ((i < 2) || (i > sizeof(TASMOTA_VERSION))) {
     return false;
   }
   // Keep shifting the parsed version until we hit the maximum number of tokens.
   // VERSION stores the major number of the version in the most significant byte of the uint32_t.
-  while (i < sizeof(VERSION)) {
+  while (i < sizeof(TASMOTA_VERSION)) {
     version <<= 8;
     i++;
   }
   // Now we should have a fully constructed version number in uint32_t form.
-  return (version > VERSION);
+  return (version > TASMOTA_VERSION);
 }
 
 int32_t UpdateDevicesPresent(int32_t change) {
@@ -1682,26 +1682,28 @@ bool FlashPin(uint32_t pin) {
 #if CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32C3
   return (((pin > 10) && (pin < 12)) || ((pin > 13) && (pin < 18)));  // ESP32C3 has GPIOs 11-17 reserved for Flash, with some boards GPIOs 12 13 are useable
 #elif CONFIG_IDF_TARGET_ESP32C6
-  return (pin > 23);                      // ESP32C6 flash pins 24-30
+  return ((pin == 24) || (pin == 25) || (pin == 27) || (pin == 29) || (pin == 30));  // ESP32C6 has GPIOs 24-30 reserved for Flash, with some boards GPIOs 26 28 are useable
 #elif CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
-  return (pin > 21) && (pin < 33);        // ESP32S2 skip 22-32
+  return (pin > 21) && (pin < 33);     // ESP32S2 skip 22-32
 #else
-  return (pin >= 28) && (pin <= 31);      // ESP32 skip 28-31
+  return (pin >= 28) && (pin <= 31);   // ESP32 skip 28-31
 #endif  // ESP32C2/C3/C6 and S2/S3
 #endif  // ESP32
 }
 
-bool RedPin(uint32_t pin) {  // Pin may be dangerous to change, display in RED in template console
+bool RedPin(uint32_t pin) {            // Pin may be dangerous to change, display in RED in template console
 #ifdef ESP8266
   return (9 == pin) || (10 == pin);
 #endif  // ESP8266
 #ifdef ESP32
 #if CONFIG_IDF_TARGET_ESP32C2 || CONFIG_IDF_TARGET_ESP32C3
-  return (12 == pin) || (13 == pin);  // ESP32C3: GPIOs 12 13 are usually used for Flash (mode QIO/QOUT)
-#elif CONFIG_IDF_TARGET_ESP32C6 || CONFIG_IDF_TARGET_ESP32S2
-  return false;                       // No red pin on ESP32C6 and ESP32S3
+  return (12 == pin) || (13 == pin);   // ESP32C3: GPIOs 12 13 are usually used for Flash (mode QIO/QOUT)
+#elif CONFIG_IDF_TARGET_ESP32C6
+  return (26 == pin) || (28 == pin);   // ESP32C6: GPIOs 26 28 are usually used for Flash (mode QIO/QOUT)
+#elif CONFIG_IDF_TARGET_ESP32S2
+  return false;                        // No red pin on ESP32S3
 #elif CONFIG_IDF_TARGET_ESP32S3
-  return (33 <= pin) && (37 >= pin);  // ESP32S3: GPIOs 33..37 are usually used for PSRAM
+  return (33 <= pin) && (37 >= pin);   // ESP32S3: GPIOs 33..37 are usually used for PSRAM
 #else   // ESP32 red pins are 6-11 for original ESP32, other models like PICO are not impacted if flash pins are condfigured
   // PICO can also have 16/17/18/23 not available
   return ((6 <= pin) && (11 >= pin)) || (16 == pin) || (17 == pin);  // TODO adapt depending on the exact type of ESP32
@@ -1714,17 +1716,7 @@ uint32_t ValidPin(uint32_t pin, uint32_t gpio, uint8_t isTuya = false) {
     return GPIO_NONE;    // Disable flash pins GPIO6, GPIO7, GPIO8 and GPIO11
   }
 
-#if CONFIG_IDF_TARGET_ESP32C2
-// ignore
-#elif CONFIG_IDF_TARGET_ESP32C3
-// ignore
-#elif CONFIG_IDF_TARGET_ESP32C6
-// ignore
-#elif CONFIG_IDF_TARGET_ESP32S2
-// ignore
-#elif CONFIG_IDF_TARGET_ESP32
-// ignore
-#else // not ESP32C3 and not ESP32S2
+#ifdef ESP8266
   if (((WEMOS == Settings->module) || isTuya) && !Settings->flag3.user_esp8285_enable) {  // SetOption51 - Enable ESP8285 user GPIO's
     if ((9 == pin) || (10 == pin)) {
       return GPIO_NONE;  // Disable possible flash GPIO9 and GPIO10
@@ -2305,8 +2297,9 @@ void SyslogAsync(bool refresh) {
   char* line;
   size_t len;
   while (GetLog(TasmotaGlobal.syslog_level, &index, &line, &len)) {
-    // 00:00:02.096 HTP: Web server active on wemos5 with IP address 192.168.2.172
-    //              HTP: Web server active on wemos5 with IP address 192.168.2.172
+    // <--- mxtime ---> TAG: <---------------------- MSG ---------------------------->
+    // 00:00:02.096-029 HTP: Web server active on wemos5 with IP address 192.168.2.172
+    //                  HTP: Web server active on wemos5 with IP address 192.168.2.172
     uint32_t mxtime = strchr(line, ' ') - line +1;  // Remove mxtime
     if (mxtime > 0) {
       uint32_t current_hash = GetHash(SettingsText(SET_SYSLOG_HOST), strlen(SettingsText(SET_SYSLOG_HOST)));
@@ -2329,7 +2322,63 @@ void SyslogAsync(bool refresh) {
       }
 
       char header[64];
-      snprintf_P(header, sizeof(header), PSTR("%s ESP-"), NetworkHostname());
+      /* Legacy format (until v13.3.0.1) - HOSTNAME TAG: MSG
+         SYSLOG-MSG = wemos5 ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+         Result = 2023-12-20T13:41:11.825749+01:00 wemos5 ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+           and below message in syslog if hostname starts with a "z"
+         2023-12-17T00:09:52.797782+01:00 domus8 rsyslogd: Uncompression of a message failed with return code -3 - enable debug logging if you need further information. Message ignored. [v8.2302.0]
+         Notice in both cases the date and time is taken from the syslog server
+      */
+//      snprintf_P(header, sizeof(header), PSTR("%s ESP-"), NetworkHostname());
+
+      /* Legacy format - <PRI>HOSTNAME TAG: MSG
+         <PRI> = Facility 16 (= local use 0), Severity 6 (= informational) => 16 * 8 + 6 = <134>
+         SYSLOG-MSG = <134>wemos5 ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+         Result = 2023-12-21T11:31:50.378816+01:00 wemos5 ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+         Notice in both cases the date and time is taken from the syslog server. Uncompression message is gone.
+      */
+      snprintf_P(header, sizeof(header), PSTR("<134>%s ESP-"), NetworkHostname());
+
+//       SYSLOG-MSG = <134>wemos5 Tasmota HTP: Web server active on wemos5 with IP address 192.168.2.172
+//       Result = 2023-12-21T11:31:50.378816+01:00 wemos5 Tasmota HTP: Web server active on wemos5 with IP address 192.168.2.172
+//      snprintf_P(header, sizeof(header), PSTR("<134>%s Tasmota "), NetworkHostname());
+
+      /* RFC3164 - BSD syslog protocol - <PRI>TIMESTAMP HOSTNAME TAG: MSG
+         <PRI> = Facility 16 (= local use 0), Severity 6 (= informational) => 16 * 8 + 6 = <134>
+         TIMESTAMP = Mmm dd hh:mm:ss
+         TAG: = ESP-HTP:
+         SYSLOG-MSG = <134>Jan  1 00:00:02 wemos5 ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+         Result = 2023-01-01T00:00:02+01:00 wemos5 ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+         Notice Year is taken from syslog server. Month, day and time is provided by Tasmota device. No milliseconds
+      */
+//      snprintf_P(header, sizeof(header), PSTR("<134>%s %s ESP-"), GetSyslogDate(line).c_str(), NetworkHostname());
+
+//       SYSLOG-MSG = <134>Jan  1 00:00:02 wemos5 Tasmota HTP: Web server active on wemos5 with IP address 192.168.2.172
+//       Result = 2023-01-01T00:00:02+01:00 wemos5 Tasmota HTP: Web server active on wemos5 with IP address 192.168.2.172
+//      snprintf_P(header, sizeof(header), PSTR("<134>%s %s Tasmota "), GetSyslogDate(line).c_str(), NetworkHostname());
+
+      /* RFC5425 - Syslog protocol - <PRI>VERSION TIMESTAMP HOSTNAME APP_NAME PROCID STRUCTURED-DATA MSGID MSG
+         <PRI> = Facility 16 (= local use 0), Severity 6 (= informational) => 16 * 8 + 6 = <134>
+         VERSION = 1
+         TIMESTAMP = yyyy-mm-ddThh:mm:ss.nnnnnn-hh:mm (= local with timezone)
+         APP_NAME = Tasmota
+         PROCID = -
+         STRUCTURED-DATA = -
+         MSGID = ESP-HTP:
+         SYSLOG-MSG = <134>1 1970-01-01T00:00:02.096000+01:00 wemos5 Tasmota - - ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+         Result = 1970-01-01T00:00:02.096000+00:00 wemos5 Tasmota ESP-HTP: Web server active on wemos5 with IP address 192.168.2.172
+         Notice date and time is provided by Tasmota device.
+      */
+//      char line_time[mxtime];
+//      subStr(line_time, line, " ", 1);                                 // 00:00:02.096-026
+//      subStr(line_time, line_time, "-", 1);                            // 00:00:02.096
+//      String systime = GetDate() + line_time + "000" + GetTimeZone();  // 1970-01-01T00:00:02.096000+01:00
+//      snprintf_P(header, sizeof(header), PSTR("<134>1 %s %s Tasmota - - ESP-"), systime.c_str(), NetworkHostname());
+
+//       SYSLOG-MSG = <134>1 1970-01-01T00:00:02.096000+01:00 wemos5 Tasmota - - HTP: Web server active on wemos5 with IP address 192.168.2.172
+//       Result = 1970-01-01T00:00:02.096000+00:00 wemos5 Tasmota HTP: Web server active on wemos5 with IP address 192.168.2.172
+//      snprintf_P(header, sizeof(header), PSTR("<134>1 %s %s Tasmota - - "), systime.c_str(), NetworkHostname());
+
       char* line_start = line +mxtime;
 #ifdef ESP8266
       // Packets over 1460 bytes are not send

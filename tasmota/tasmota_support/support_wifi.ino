@@ -42,6 +42,9 @@ const uint8_t WIFI_RETRY_OFFSET_SEC = WIFI_RETRY_SECONDS;  // seconds
 
 #include <ESP8266WiFi.h>                   // Wifi, MQTT, Ota, WifiManager
 #include "lwip/dns.h"
+#if ESP_IDF_VERSION_MAJOR >= 5
+  #include "esp_netif.h"
+#endif
 
 int WifiGetRssiAsQuality(int rssi) {
   int quality = 0;
@@ -99,6 +102,7 @@ void WifiConfig(uint8_t type)
     UdpDisconnect();
 #endif  // USE_EMULATION
     WiFi.disconnect();                       // Solve possible Wifi hangs
+    delay(100);
     Wifi.config_type = type;
 
 #ifndef USE_WEBSERVER
@@ -143,7 +147,6 @@ void WifiSetMode(WiFiMode_t wifi_mode) {
 
     // See: https://github.com/esp8266/Arduino/issues/6172#issuecomment-500457407
     WiFi.forceSleepWake(); // Make sure WiFi is really active.
-    delay(100);
   }
 
   uint32_t retry = 2;
@@ -155,10 +158,8 @@ void WifiSetMode(WiFiMode_t wifi_mode) {
   if (wifi_mode == WIFI_OFF) {
     delay(1000);
     WiFi.forceSleepBegin();
-    delay(1);
-  } else {
-    delay(30); // Must allow for some time to init.
   }
+  delay(100);  // Must allow for some time to init.
 }
 
 void WiFiSetSleepMode(void)
@@ -198,6 +199,7 @@ void WiFiSetSleepMode(void)
       WiFi.setSleepMode(WIFI_MODEM_SLEEP);      // Sleep (Esp8288/Arduino core and sdk default)
     }
   }
+  delay(100);
 }
 
 void WifiBegin(uint8_t flag, uint8_t channel) {
@@ -212,15 +214,13 @@ void WifiBegin(uint8_t flag, uint8_t channel) {
 
 #ifdef USE_WIFI_RANGE_EXTENDER
   if (WiFi.getMode() != WIFI_AP_STA || !RgxApUp()) {  // Preserve range extender connections (#17103)
-    WiFi.disconnect(true);  // Delete SDK wifi config
-    delay(200);
-    WifiSetMode(WIFI_STA);  // Disable AP mode
-  }
-#else
-  WiFi.disconnect(true);    // Delete SDK wifi config
+#endif  // USE_WIFI_RANGE_EXTENDER
+  WiFi.disconnect(true);  // Delete SDK wifi config
   delay(200);
-  WifiSetMode(WIFI_STA);    // Disable AP mode
-#endif
+  WifiSetMode(WIFI_STA);  // Disable AP mode
+#ifdef USE_WIFI_RANGE_EXTENDER
+  }
+#endif  // USE_WIFI_RANGE_EXTENDER
 
   WiFiSetSleepMode();
   WifiSetOutputPower();
@@ -258,6 +258,7 @@ void WifiBegin(uint8_t flag, uint8_t channel) {
   } else {
     WiFi.begin(SettingsText(SET_STASSID1 + Settings->sta_active), SettingsText(SET_STAPWD1 + Settings->sta_active));
   }
+  delay(500);
   AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_CONNECTING_TO_AP "%d %s%s " D_IN_MODE " 11%c " D_AS " %s..."),
     Settings->sta_active +1, SettingsText(SET_STASSID1 + Settings->sta_active), stemp, pgm_read_byte(&kWifiPhyMode[WiFi.getPhyMode() & 0x3]), TasmotaGlobal.hostname);
 
@@ -564,15 +565,6 @@ bool WifiFindIPv6(IPAddress *ip, bool is_local, const char * if_type = "st") {
   }
   return false;
 }
-// add an IPv6 link-local address to all netif
-void CreateLinkLocalIPv6(void)
-{
-#ifdef ESP32
-  for (auto intf = esp_netif_next(NULL); intf != NULL; intf = esp_netif_next(intf)) {
-    esp_netif_create_ip6_linklocal(intf);
-  }
-#endif // ESP32
-}
 
 
 // Returns only IPv6 global address (no loopback and no link-local)
@@ -654,10 +646,10 @@ String DNSGetIPStr(uint32_t idx)
 void WifiDumpAddressesIPv6(void)
 {
   for (netif* intf = netif_list; intf != nullptr; intf = intf->next) {
-    if (!ip_addr_isany_val(intf->ip_addr)) AddLog(LOG_LEVEL_DEBUG, "WIF: '%c%c' IPv4 %s", intf->name[0], intf->name[1], IPAddress(intf->ip_addr).toString().c_str());
+    if (!ip_addr_isany_val(intf->ip_addr)) AddLog(LOG_LEVEL_DEBUG, "WIF: '%c%c%i' IPv4 %s", intf->name[0], intf->name[1], intf->num, IPAddress(intf->ip_addr).toString().c_str());
     for (uint32_t i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
       if (!ip_addr_isany_val(intf->ip6_addr[i]))
-        AddLog(LOG_LEVEL_DEBUG, "IP : '%c%c' IPv6 %s %s", intf->name[0], intf->name[1],
+        AddLog(LOG_LEVEL_DEBUG, "IP : '%c%c%i' IPv6 %s %s", intf->name[0], intf->name[1], intf->num,
                                 IPAddress(intf->ip6_addr[i]).toString().c_str(),
                                 ip_addr_islinklocal(&intf->ip6_addr[i]) ? "local" : "");
     }
@@ -810,6 +802,9 @@ bool HasIP(void) {
 }
 
 void WifiCheckIp(void) {
+  AddLog(LOG_LEVEL_DEBUG_MORE, PSTR(D_LOG_WIFI D_CHECKING_CONNECTION));
+  Wifi.counter = WIFI_CHECK_SEC;
+
 #ifdef USE_IPV6
   if (WL_CONNECTED == WiFi.status()) {
 #ifdef ESP32
@@ -945,8 +940,6 @@ void WifiCheck(uint8_t param)
       }
     } else {
       if (Wifi.counter <= 0) {
-        AddLog(LOG_LEVEL_DEBUG_MORE, PSTR(D_LOG_WIFI D_CHECKING_CONNECTION));
-        Wifi.counter = WIFI_CHECK_SEC;
         WifiCheckIp();
       }
       if ((WL_CONNECTED == WiFi.status()) && WifiHasIP() && !Wifi.config_type) {
@@ -984,6 +977,7 @@ float WifiGetOutputPower(void) {
 void WifiSetOutputPower(void) {
   if (Settings->wifi_output_power) {
     WiFi.setOutputPower((float)(Settings->wifi_output_power) / 10);
+    delay(100);
   } else {
     AddLog(LOG_LEVEL_DEBUG, PSTR("WIF: Dynamic Tx power enabled"));  // WifiPower 0
   }
@@ -1155,11 +1149,14 @@ void WifiDisable(void) {
   TasmotaGlobal.global_state.wifi_down = 1;
 }
 
-void EspRestart(void)
-{
+void EspRestart(void) {
   ResetPwm();
   WifiShutdown(true);
   CrashDumpClear();           // Clear the stack dump in RTC
+
+#ifdef CONFIG_IDF_TARGET_ESP32C3
+  GpioForceHoldRelay();       // Retain the state when the chip or system is reset, for example, when watchdog time-out or Deep-sleep
+#endif  // CONFIG_IDF_TARGET_ESP32C3
 
   if (TasmotaGlobal.restart_halt) {  // Restart 2
     while (1) {
@@ -1171,7 +1168,12 @@ void EspRestart(void)
     }
   }
   else if (TasmotaGlobal.restart_deepsleep) {  // Restart 9
+  #ifdef USE_DEEPSLEEP
+    DeepSleepStart();
+    // should never come to this line....
+  #endif
     ESP.deepSleep(0);         // Deep sleep mode with only hardware triggered wake up
+
   }
   else {
     ESP_Restart();
@@ -1263,11 +1265,32 @@ bool WifiDNSGetIPv6Priority(void) {
 }
 
 bool WifiHostByName(const char* aHostname, IPAddress& aResult) {
+#ifdef USE_IPV6
+#if ESP_IDF_VERSION_MAJOR >= 5
+  // try converting directly to IP
+  if (aResult.fromString(aHostname)) {
+    return true;   // we're done
+  }
+#endif
+#endif // USE_IPV6
+
   uint32_t dns_start = millis();
   bool success = WiFi.hostByName(aHostname, aResult, Settings->dns_timeout);
   uint32_t dns_end = millis();
   if (success) {
     // Host name resolved
+#ifdef USE_IPV6
+#if ESP_IDF_VERSION_MAJOR >= 5
+    // check if there is a zone-id
+    // look for '%' in string
+    const char *s = aHostname;
+    while (*s && *s != '%') { s++; }
+    if (*s == '%') {
+        // we have a zone id
+        aResult.setZone(netif_name_to_index(s + 1));
+    }
+#endif
+#endif // USE_IPV6
     if (0xFFFFFFFF != (uint32_t)aResult) {
       AddLog(LOG_LEVEL_DEBUG_MORE, PSTR(D_LOG_WIFI "DNS resolved '%s' (%s) in %i ms"), aHostname, aResult.toString().c_str(), dns_end - dns_start);
       return true;

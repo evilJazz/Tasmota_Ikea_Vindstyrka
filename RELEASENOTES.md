@@ -36,9 +36,9 @@ While fallback or downgrading is common practice it was never supported due to S
 
 This release will be supported from ESP8266/Arduino library Core version **2.7.4.9** due to reported security and stability issues on previous Core version. This will also support gzipped binaries.
 
-This release will be supported from ESP32/Arduino library Core version **2.0.11**.
+This release will be supported from ESP32/Arduino library Core version **2.0.14**.
 
-Support of ESP8266 Core versions before 2.7.4.9 and ESP32 Core versions before 2.0.11 have been removed.
+Support of ESP8266 Core versions before 2.7.4.9 and ESP32 Core versions before 2.0.14 have been removed.
 
 ## Support of TLS
 
@@ -75,12 +75,12 @@ Latest released binaries can be downloaded from
 - http://ota.tasmota.com/tasmota/release
 
 Historical binaries can be downloaded from
-- http://ota.tasmota.com/tasmota/release-13.1.0
+- http://ota.tasmota.com/tasmota/release-13.3.0
 
 The latter links can be used for OTA upgrades too like ``OtaUrl http://ota.tasmota.com/tasmota/release/tasmota.bin.gz``
 
 ### ESP32, ESP32-C3, ESP32-S2 and ESP32-S3 based
-The following binary downloads have been compiled with ESP32/Arduino library core version **2.0.11**.
+The following binary downloads have been compiled with ESP32/Arduino library core version **2.0.14**.
 
 - **tasmota32.bin** = The Tasmota version with most drivers including additional sensors and KNX for 4M+ flash.  **RECOMMENDED RELEASE BINARY**
 - **tasmota32xy.bin** = The Tasmota version with most drivers including additional sensors and KNX for ESP32-C3/S2/S3 and 4M+ flash.
@@ -95,12 +95,18 @@ The following binary downloads have been compiled with ESP32/Arduino library cor
 - **tasmota32-webcam.bin** = The Webcam version adds webcam support for 4M+ flash.
 - **tasmota32-zbbridgepro.bin** - The Sonoff Zigbee Bridge Pro version with CC2652P firmware load support.
 
+### ESP32-C2 and ESP32-C6 based
+The following binary downloads have been compiled with ESP32/Arduino library core version **3.0.0-alpha3**.
+
+- **tasmota32c2-arduino30.bin** = The Tasmota version with most drivers including additional sensors and KNX for ESP32-C2 and 4M+ flash.
+- **tasmota32c6cdc-arduino30.bin** = The Tasmota version with most drivers including additional sensors and KNX for ESP32-C6 with serial over embedded USB CDC or hardware USB and 4M+ flash.
+
 Latest released binaries can be downloaded from
 - https://github.com/arendst/Tasmota-firmware/tree/main/release-firmware
 - https://ota.tasmota.com/tasmota32/release
 
 Historical binaries can be downloaded from
-- https://ota.tasmota.com/tasmota32/release-13.1.0
+- https://ota.tasmota.com/tasmota32/release-13.3.0
 
 The latter links can be used for OTA upgrades too like ``OtaUrl https://ota.tasmota.com/tasmota32/release/tasmota32.bin``
 
@@ -110,19 +116,31 @@ The latter links can be used for OTA upgrades too like ``OtaUrl https://ota.tasm
 
 [Complete list](BUILDS.md) of available feature and sensors.
 
-## Changelog v13.1.0.1
+## Changelog v13.3.0.1
 ### Added
-- Experimental support for ESP32-C2 and ESP32-C6 using Arduino core v3.0 
-- Commands to allow setting of timeprop parameters [#19310](https://github.com/arendst/Tasmota/issues/19310)
-- Variables ``%power<1..28>%`` and  ``%switch<1..28>%`` to rules [#19331](https://github.com/arendst/Tasmota/issues/19331)
+- Support for CST816S touch interface [#20213](https://github.com/arendst/Tasmota/issues/20213)
+- Support for Sonoff Basic R4 Magic Switch [#20247](https://github.com/arendst/Tasmota/issues/20247)
+- Display of active drivers using command ``status 4``
+- NeoPool hydrolysis FL1 and Redox flag [#20258](https://github.com/arendst/Tasmota/issues/20258)
+- Support negative power on BL0942 using index 5..8 [#20322](https://github.com/arendst/Tasmota/issues/20322)
+- ESP32 used UART information
+- Berry added `introspect.set()` for class attributes [#20339](https://github.com/arendst/Tasmota/issues/20339)
+- HASPmota added `haspmota.page_show()` to change page [#20333](https://github.com/arendst/Tasmota/issues/20333)
+- Matter support for password for remote Tasmota devices [#20296](https://github.com/arendst/Tasmota/issues/20296)
 
 ### Breaking Changed
+- Refactoring of Berry `animate` module for WS2812 Leds [#20236](https://github.com/arendst/Tasmota/issues/20236)
 
 ### Changed
-- Display invert setting after tasmota start in uDisplay driver [#19337](https://github.com/arendst/Tasmota/issues/19337)
+- Support syslog updates every sleep or every second if `#define SYSLOG_UPDATE_SECOND` [#20260](https://github.com/arendst/Tasmota/issues/20260)
 
 ### Fixed
-- Shutter invert [#19341](https://github.com/arendst/Tasmota/issues/19341) and [#19374](https://github.com/arendst/Tasmota/issues/19374)
-- Teleinfo power [#19381](https://github.com/arendst/Tasmota/issues/19381)
+- CVE-2021-36603 Cross Site Scripting (XSS) vulnerability [#12221](https://github.com/arendst/Tasmota/issues/12221)
+- Syslog server warning caused by lack of <PRI> field and hostname starting with 'z' [#14689](https://github.com/arendst/Tasmota/issues/14689)
+- Support for Domoticz floor/room topics. Regression from v12.0.1 [#20299](https://github.com/arendst/Tasmota/issues/20299)
+- ESP32 piezo ceramic buzzer doesn't buzz [#20118](https://github.com/arendst/Tasmota/issues/20118)
+- LVGL fix type for lv_imgbtn [#20354](https://github.com/arendst/Tasmota/issues/20354)
+- Berry claiming UART0 if needed [#20324](https://github.com/arendst/Tasmota/issues/20324)
+- Matter Contact sensor was not triggering any update [#20232](https://github.com/arendst/Tasmota/issues/20232)
 
 ### Removed

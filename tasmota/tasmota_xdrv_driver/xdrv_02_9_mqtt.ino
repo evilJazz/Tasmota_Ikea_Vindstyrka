@@ -465,7 +465,9 @@ bool MqttIsConnected(void) {
 }
 
 void MqttDisconnect(void) {
-  MqttClient.disconnect();
+  if (MqttClient.connected()) {
+    MqttClient.disconnect();
+  }
 }
 
 void MqttSubscribeLib(const char *topic) {
@@ -911,9 +913,11 @@ void MqttDisconnected(int state) {
     Mqtt.retry_counter_delay++;
   }
 
-  MqttClient.disconnect();
-  // Check if this solves intermittent MQTT re-connection failures when broker is restarted
-  EspClient.stop();
+  if (MqttClient.connected()) {
+    MqttClient.disconnect();
+    // Check if this solves intermittent MQTT re-connection failures when broker is restarted
+    EspClient.stop();
+  }
 
   AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_MQTT D_CONNECT_FAILED_TO " %s:%d, rc %d. " D_RETRY_IN " %d " D_UNIT_SECOND),
     SettingsText(SET_MQTT_HOST), Settings->mqtt_port, state, Mqtt.retry_counter);
@@ -1058,8 +1062,7 @@ void MqttReconnect(void) {
 
   AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_MQTT D_ATTEMPTING_CONNECTION));
 
-  if (MqttClient.connected()) { MqttClient.disconnect(); }
-
+  MqttDisconnect();
   MqttSetClientTimeout();
 
   MqttClient.setCallback(MqttDataHandler);
@@ -1971,16 +1974,16 @@ void HandleMqttConfiguration(void)
   WSContentStart_P(PSTR(D_CONFIGURE_MQTT));
   WSContentSendStyle();
   WSContentSend_P(HTTP_FORM_MQTT1,
-    SettingsText(SET_MQTT_HOST),
+    SettingsTextEscaped(SET_MQTT_HOST).c_str(),
     Settings->mqtt_port,
 #ifdef USE_MQTT_TLS
     Mqtt.mqtt_tls ? PSTR(" checked") : "",      // SetOption103 - Enable MQTT TLS
 #endif // USE_MQTT_TLS
-    Format(str, PSTR(MQTT_CLIENT_ID), sizeof(str)), PSTR(MQTT_CLIENT_ID), SettingsText(SET_MQTT_CLIENT));
+    Format(str, PSTR(MQTT_CLIENT_ID), sizeof(str)), PSTR(MQTT_CLIENT_ID), SettingsTextEscaped(SET_MQTT_CLIENT).c_str());
   WSContentSend_P(HTTP_FORM_MQTT2,
-    (!strlen(SettingsText(SET_MQTT_USER))) ? "0" : SettingsText(SET_MQTT_USER),
-    Format(str, PSTR(MQTT_TOPIC), sizeof(str)), PSTR(MQTT_TOPIC), SettingsText(SET_MQTT_TOPIC),
-    PSTR(MQTT_FULLTOPIC), PSTR(MQTT_FULLTOPIC), SettingsText(SET_MQTT_FULLTOPIC));
+    (!strlen(SettingsText(SET_MQTT_USER))) ? "0" : SettingsTextEscaped(SET_MQTT_USER).c_str(),
+    Format(str, PSTR(MQTT_TOPIC), sizeof(str)), PSTR(MQTT_TOPIC), SettingsTextEscaped(SET_MQTT_TOPIC).c_str(),
+    PSTR(MQTT_FULLTOPIC), PSTR(MQTT_FULLTOPIC), SettingsTextEscaped(SET_MQTT_FULLTOPIC).c_str());
   WSContentSend_P(HTTP_FORM_END);
   WSContentSpaceButton(BUTTON_CONFIGURATION);
   WSContentStop();
@@ -2029,6 +2032,9 @@ bool Xdrv02(uint32_t function)
         break;
       case FUNC_PRE_INIT:
         MqttInit();
+        break;
+      case FUNC_ACTIVE:
+        result = true;
         break;
     }
   }

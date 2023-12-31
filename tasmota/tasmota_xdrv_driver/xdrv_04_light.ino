@@ -1358,9 +1358,10 @@ void LightColorOffset(int32_t offset) {
   uint16_t hue;
   uint8_t sat;
   light_state.getHSB(&hue, &sat, nullptr);  // Allow user control over Saturation
-  hue += offset;
-  if (hue < 0) { hue += 359; }
-  if (hue > 359) { hue -= 359; }
+  int16_t hue_new = hue + offset;
+  if (hue_new < 0) { hue_new += 359; }
+  if (hue_new > 359) { hue_new -= 359; }
+  hue = hue_new;
   if (!Light.pwm_multi_channels) {
     light_state.setHS(hue, sat);
   } else {
@@ -1776,9 +1777,10 @@ void LightAnimate(void)
   // make sure we update CT range in case SetOption82 was changed
   Light.strip_timer_counter++;
 
-  // set sleep parameter: either settings,
-  // or set a maximum of PWM_MAX_SLEEP if light is on or Fade is running
-  if (Light.power || Light.fade_running) {
+  // Set a maximum sleep of PWM_MAX_SLEEP if Fade is running, or if light is on and
+  // a frequently updating light scheme is in use. This is to allow smooth transitions
+  // between light levels and colors.
+  if ((Settings->light_scheme > LS_POWER && Light.power) || Light.fade_running) {
     if (TasmotaGlobal.sleep > PWM_MAX_SLEEP) {
       sleep_previous = TasmotaGlobal.sleep;     // save previous value of sleep
       TasmotaGlobal.sleep = PWM_MAX_SLEEP;      // set a maximum value (in milliseconds) to sleep to ensure that animations are smooth
@@ -3458,17 +3460,20 @@ bool Xdrv04(uint32_t function)
         LightInit();
         break;
 #ifdef USE_LIGHT_ARTNET
-    case FUNC_JSON_APPEND:
-      ArtNetJSONAppend();
-      break;
-    case FUNC_NETWORK_UP:
-      ArtNetFuncNetworkUp();
-      break;
-    case FUNC_NETWORK_DOWN:
-      ArtNetFuncNetworkDown();
-      break;
+      case FUNC_JSON_APPEND:
+        ArtNetJSONAppend();
+        break;
+      case FUNC_NETWORK_UP:
+        ArtNetFuncNetworkUp();
+        break;
+      case FUNC_NETWORK_DOWN:
+        ArtNetFuncNetworkDown();
+        break;
 #endif // USE_LIGHT_ARTNET
-    }
+      case FUNC_ACTIVE:
+        result = true;
+        break;
+   }
   }
   return result;
 }
